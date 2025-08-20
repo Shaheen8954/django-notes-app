@@ -1,56 +1,23 @@
-version: "3.8"
-
 services:
   nginx:
     build: ./nginx
-    image: nginx
-    container_name: "nginx_cont"
     ports:
       - "80:80"
-    restart: always
+    restart: unless-stopped
     depends_on:
-      - django_app
-    networks:
-      - notes-app-nw
+      django_app:
+        condition: service_healthy
 
   django_app:
     build:
       context: .
-    image: django_app
-    container_name: "django_cont"
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     command: sh -c "python manage.py migrate --noinput && gunicorn notesapp.wsgi --bind 0.0.0.0:8000"
-    env_file:
-      - ".env"
-    depends_on:
-      - db
-    restart: always
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/admin || exit 1"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys;\ntry:\n  r=urllib.request.urlopen('http://localhost:8000/admin',timeout=5);\n  sys.exit(0 if r.getcode() < 500 else 1)\nexcept Exception:\n  sys.exit(1)\n\" "]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
-    networks:
-      - notes-app-nw
-
-  db:
-    image: mysql
-    container_name: "db_cont"
-    environment:
-      - MYSQL_ROOT_PASSWORD=root
-      - MYSQL_DATABASE=test_db
-    volumes:
-      - ./data/mysql/db:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 60s
-    networks:
-      - notes-app-nw
-
-networks:
-  notes-app-nw:
